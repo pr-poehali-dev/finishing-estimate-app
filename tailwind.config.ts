@@ -19,7 +19,7 @@ export default {
 			}
 		},
 		fontFamily: {
-				sans: ['Golos Text', 'sans-serif'],
+				sans: ['IBM Plex Sans', 'sans-serif'],
 			},
 		extend: {
 			colors: {
