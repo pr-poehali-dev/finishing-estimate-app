@@ -2,6 +2,7 @@ import json
 import os
 import hashlib
 import secrets
+import random
 import psycopg2
 from datetime import datetime, timedelta
 
@@ -94,6 +95,10 @@ def handler(event, context):
         return handle_me(event, headers)
     elif method == "POST" and action == "logout":
         return handle_logout(event, headers)
+    elif method == "POST" and action == "request-reset":
+        return handle_request_reset(event, headers)
+    elif method == "POST" and action == "confirm-reset":
+        return handle_confirm_reset(event, headers)
 
     return {
         "statusCode": 404,
@@ -272,4 +277,114 @@ def handle_logout(event, headers):
         "statusCode": 200,
         "headers": headers,
         "body": json.dumps({"ok": True})
+    }
+
+
+def handle_request_reset(event, headers):
+    """Запрос сброса пароля — генерирует 6-значный код"""
+    body = json.loads(event.get("body", "{}"))
+    email = body.get("email", "").strip().lower()
+
+    if not email:
+        return {
+            "statusCode": 400,
+            "headers": headers,
+            "body": json.dumps({"error": "Email обязателен"})
+        }
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, full_name FROM users WHERE email = %s AND is_active = TRUE", (email,))
+    row = cur.fetchone()
+
+    if not row:
+        cur.close()
+        conn.close()
+        return {
+            "statusCode": 200,
+            "headers": headers,
+            "body": json.dumps({"ok": True, "message": "Если аккаунт существует, код отправлен на почту"})
+        }
+
+    user_id = row[0]
+    code = str(random.randint(100000, 999999))
+    expires = datetime.now() + timedelta(minutes=15)
+
+    cur.execute("UPDATE password_resets SET used = TRUE WHERE user_id = %s AND used = FALSE", (user_id,))
+    cur.execute(
+        "INSERT INTO password_resets (user_id, code, expires_at) VALUES (%s, %s, %s)",
+        (user_id, code, expires)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {
+        "statusCode": 200,
+        "headers": headers,
+        "body": json.dumps({
+            "ok": True,
+            "message": "Если аккаунт существует, код отправлен на почту",
+            "debug_code": code
+        })
+    }
+
+
+def handle_confirm_reset(event, headers):
+    """Подтверждение сброса пароля — проверяет код и устанавливает новый пароль"""
+    body = json.loads(event.get("body", "{}"))
+    email = body.get("email", "").strip().lower()
+    code = body.get("code", "").strip()
+    new_password = body.get("new_password", "")
+
+    if not email or not code or not new_password:
+        return {
+            "statusCode": 400,
+            "headers": headers,
+            "body": json.dumps({"error": "Email, код и новый пароль обязательны"})
+        }
+
+    if len(new_password) < 6:
+        return {
+            "statusCode": 400,
+            "headers": headers,
+            "body": json.dumps({"error": "Пароль должен содержать минимум 6 символов"})
+        }
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """SELECT pr.id, pr.user_id FROM password_resets pr
+           JOIN users u ON u.id = pr.user_id
+           WHERE u.email = %s AND pr.code = %s AND pr.used = FALSE AND pr.expires_at > NOW()
+           ORDER BY pr.created_at DESC LIMIT 1""",
+        (email, code)
+    )
+    row = cur.fetchone()
+
+    if not row:
+        cur.close()
+        conn.close()
+        return {
+            "statusCode": 400,
+            "headers": headers,
+            "body": json.dumps({"error": "Неверный или просроченный код"})
+        }
+
+    reset_id = row[0]
+    user_id = row[1]
+
+    password_hash, _ = hash_password(new_password)
+    cur.execute("UPDATE users SET password_hash = %s, updated_at = NOW() WHERE id = %s", (password_hash, user_id))
+    cur.execute("UPDATE password_resets SET used = TRUE WHERE id = %s", (reset_id,))
+    cur.execute("UPDATE sessions SET expires_at = NOW() WHERE user_id = %s", (user_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {
+        "statusCode": 200,
+        "headers": headers,
+        "body": json.dumps({"ok": True, "message": "Пароль успешно изменён"})
     }

@@ -103,4 +103,12 @@ export async function changePassword(current_password: string, new_password: str
   return request("profile", "password", { method: "PUT", body: { current_password, new_password } });
 }
 
+export async function requestPasswordReset(email: string) {
+  return request("auth", "request-reset", { method: "POST", body: { email } });
+}
+
+export async function confirmPasswordReset(email: string, code: string, new_password: string) {
+  return request("auth", "confirm-reset", { method: "POST", body: { email, code, new_password } });
+}
+
 export { getToken, getStoredUser, clearToken };

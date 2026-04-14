@@ -38,6 +38,34 @@
         "error": "string"
       },
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Request password reset",
+      "method": "POST",
+      "path": "/?action=request-reset",
+      "body": {
+        "email": "testuser_reg@example.com"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "ok": true
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Confirm reset with wrong code",
+      "method": "POST",
+      "path": "/?action=confirm-reset",
+      "body": {
+        "email": "testuser_reg@example.com",
+        "code": "000000",
+        "new_password": "newpassword123"
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
     }
   ]
 }
