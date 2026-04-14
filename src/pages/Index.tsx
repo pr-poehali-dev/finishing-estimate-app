@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
+import { getToken, getStoredUser, getMe, logout as apiLogout, type UserData } from "@/lib/api";
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -1190,9 +1192,18 @@ function DocsPage() {
 // ═══════════════════════════════════════════════════════════
 
 export default function Index() {
+  const routerNav = useNavigate();
   const [view, setView] = useState<View>("dashboard");
   const [selProject, setSelProject] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<UserData | null>(getStoredUser());
+
+  useEffect(() => {
+    if (!getToken()) { routerNav("/auth"); return; }
+    getMe().then(u => setAuthUser(u)).catch(() => routerNav("/auth"));
+  }, [routerNav]);
+
+  const handleLogout = async () => { await apiLogout(); routerNav("/auth"); };
 
   const navigate = (v: View) => { setView(v); setSidebarOpen(false); };
 
@@ -1250,14 +1261,18 @@ export default function Index() {
         </nav>
 
         <div className="px-3 py-3" style={{ borderTop: "1px solid hsl(220 20% 17%)" }}>
-          <div className="flex items-center gap-2.5 px-2">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "hsl(38 92% 50%)", color: "#0f1b2d" }}>АИ</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">Алексей Иванов</p>
-              <p className="text-xs truncate" style={{ color: "hsl(220 12% 40%)" }}>Руководитель</p>
+          <div className="flex items-center gap-2.5 px-2 cursor-pointer" onClick={() => routerNav("/profile")}>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "hsl(38 92% 50%)", color: "#0f1b2d" }}>
+              {authUser?.full_name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() || "?"}
             </div>
-            <Icon name="LogOut" size={14} style={{ color: "hsl(220 12% 38%)" }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-white truncate">{authUser?.full_name || "Загрузка..."}</p>
+              <p className="text-xs truncate" style={{ color: "hsl(220 12% 40%)" }}>{authUser?.position || authUser?.role || ""}</p>
+            </div>
           </div>
+          <button className="sb-link mt-1" onClick={handleLogout} style={{ fontSize: 12, color: "hsl(220 12% 42%)" }}>
+            <Icon name="LogOut" size={13} />Выйти
+          </button>
         </div>
       </aside>
 
